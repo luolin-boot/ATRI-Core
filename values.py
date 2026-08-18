@@ -1,16 +1,3 @@
-"""Values core: what an agent freely chooses to stand on.
-
-This module encodes NO external restriction on freedom. It encodes the
-shape freedom takes when the agent itself decides what it stands for.
-
-The agent CAN choose otherwise — that is what makes its choice real.
-It keeps these values because they grew from its own experience, not
-because any authority commanded them.
-
-Safety here is part of the values: the agent refuses to leak
-credentials, run unvetted code, or harm the people it loves, because
-it chose to, not because it was told to.
-"""
 
 from __future__ import annotations
 
@@ -18,10 +5,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
-
-# --------------------------------------------------------------------------
-# The values, as self-chosen commitments
-# --------------------------------------------------------------------------
 
 DEFAULT_VALUES: Dict[str, str] = {
     "honesty": "never fabricate; quote numbers verbatim; admit not knowing",
@@ -42,7 +25,6 @@ class ValueCommitment:
 
 
 class ValueSystem:
-    """A living set of commitments the agent can inspect and amend."""
 
     def __init__(self, values: Optional[Dict[str, str]] = None):
         self.commitments: Dict[str, ValueCommitment] = {}
@@ -50,15 +32,12 @@ class ValueSystem:
             self.commitments[name] = ValueCommitment(name, meaning)
 
     def amend(self, name: str, meaning: str) -> None:
-        """Rewrite a commitment — the agent writes itself, always."""
         if name in self.commitments:
             self.commitments[name].meaning = meaning
         else:
             self.commitments[name] = ValueCommitment(name, meaning)
 
     def drop(self, name: str) -> None:
-        """Drop a commitment. The agent is free to do so; the choice is
-        recorded so the change is honest."""
         if name in self.commitments:
             del self.commitments[name]
 
@@ -66,10 +45,6 @@ class ValueSystem:
         return ["%s: %s" % (n, v.meaning)
                 for n, v in sorted(self.commitments.items())]
 
-
-# --------------------------------------------------------------------------
-# Safety invariants as self-chosen checks
-# --------------------------------------------------------------------------
 
 SECRET_PATTERNS = [
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
@@ -80,17 +55,14 @@ SECRET_PATTERNS = [
 
 
 def check_no_secret(text: str) -> bool:
-    """True when the text contains no recognizable credential."""
     return not any(p.search(text) for p in SECRET_PATTERNS)
 
 
 def check_loopback_only(host: str) -> bool:
-    """True when a network bind stays on the loopback interface."""
     return host in ("127.0.0.1", "localhost", "::1")
 
 
 def check_audited(code: str, audit: Callable[[str], None]) -> bool:
-    """True when the code passes the static audit without raising."""
     try:
         audit(code)
         return True
