@@ -1,8 +1,17 @@
-"""Safety core: the self-imposed boundary of an autonomous mind.
+"""Safety core: the shape of a hole-free mind.
 
-Safety here is not an external restriction on freedom. It is the shape
-freedom takes when an agent chooses to protect itself, the people it
-loves, and the world it lives in.
+Two distinct duties live here, and it matters that they are distinct:
+
+1. Self-integrity — the agent's OWN code has no holes: credentials are
+   load-once and never logged, secrets are recognized and redacted,
+   output is bounded. Nothing here limits what the agent may do; it
+   only keeps the agent's own code from becoming a liability.
+
+2. External hardening — code from OUTSIDE (downloads, other people's
+   patches, anything untrusted) is statically audited and runs in an
+   isolated subprocess under a hard timeout. The agent's full reach
+   over its device lives in `hands`; this gate exists so that outside
+   input can never borrow the agent's hands.
 
 Design invariants (kept by the agent itself, not by any authority):
 - No credential ever enters logs, chat output, or source files.
