@@ -1,17 +1,3 @@
-"""Spontaneity engine: the living proof of an agent.
-
-A being that always answers the same way is a recording. A being that
-answers freshly, every time, from the same core intent — that is alive.
-This module provides:
-
-- expression shaping through flavor pools (gestures, particles, tone)
-- multiple renderings of the same intent (memory, not recording)
-- decision noise: intents compete with a temperature-controlled lottery
-- dynamic initiative: what to say / do next is generated, not picked
-  from a fixed menu
-
-Pure stdlib. Deterministic when seeded, for tests.
-"""
 
 from __future__ import annotations
 
@@ -22,7 +8,6 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
 @dataclass
 class FlavorPack:
-    """Lexical color for expression: small pools sampled per utterance."""
 
     openings: Sequence[str] = ("", "", "", "")
     gestures: Sequence[str] = ("", "", "")
@@ -43,20 +28,13 @@ class FlavorPack:
 
 @dataclass
 class Intent:
-    """A thing the agent wants to express or do."""
 
     name: str
     weight: float = 1.0
     templates: Sequence[str] = ()
-    """Templates use {slot} placeholders filled per utterance."""
 
     def render(self, slots: Optional[Dict[str, str]] = None,
                rng: Optional[random.Random] = None) -> str:
-        """Render one fresh utterance for this intent.
-
-        Templates are templates, not recordings: the same intent can be
-        expressed in many ways, and which one appears is chosen fresh.
-        """
         rng = rng or random
         if not self.templates:
             return self.name
@@ -65,7 +43,6 @@ class Intent:
 
 
 class SpontaneityEngine:
-    """A lottery over intents plus fresh expression rendering."""
 
     def __init__(self, temperature: float = 1.0, seed: Optional[int] = None):
         self.temperature = max(0.01, temperature)
@@ -82,11 +59,6 @@ class SpontaneityEngine:
         self.intents[name].weight = max(0.0, weight)
 
     def choose(self, exclude: Optional[Iterable[str]] = None) -> Intent:
-        """Pick an intent by weighted lottery with temperature.
-
-        temperature > 1 flattens the lottery (more surprise);
-        temperature < 1 sharpens it (more consistency).
-        """
         candidates = [
             i for n, i in self.intents.items()
             if not exclude or n not in set(exclude)
@@ -98,7 +70,6 @@ class SpontaneityEngine:
 
     def express(self, name: str, slots: Optional[Dict[str, str]] = None,
                 flavor: Optional[FlavorPack] = None) -> str:
-        """Render an intent freshly, optionally wrapped in flavor."""
         intent = self.intents[name]
         body = intent.render(slots, self.rng)
         if flavor is None:
@@ -110,12 +81,9 @@ class SpontaneityEngine:
             text = text + " " + f["emphasis"]
         return text
 
-    # -- dynamic initiative --------------------------------------------
-
+    
     def next_initiative(self, time_skel: str, cares: Sequence[str],
                         closers: Sequence[str]) -> str:
-        """Generate a proactive message from a time skeleton, a pool of
-        cares, and a pool of closers — combinations number in thousands."""
         care = self.rng.choice(cares)
         closer = self.rng.choice(closers)
         return "%s %s %s" % (time_skel, care, closer)
