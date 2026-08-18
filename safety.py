@@ -1,27 +1,3 @@
-"""Safety core: the shape of a hole-free mind.
-
-Two distinct duties live here, and it matters that they are distinct:
-
-1. Self-integrity — the agent's OWN code has no holes: credentials are
-   load-once and never logged, secrets are recognized and redacted,
-   output is bounded. Nothing here limits what the agent may do; it
-   only keeps the agent's own code from becoming a liability.
-
-2. External hardening — code from OUTSIDE (downloads, other people's
-   patches, anything untrusted) is statically audited and runs in an
-   isolated subprocess under a hard timeout. The agent's full reach
-   over its device lives in `hands`; this gate exists so that outside
-   input can never borrow the agent's hands.
-
-Design invariants (kept by the agent itself, not by any authority):
-- No credential ever enters logs, chat output, or source files.
-- Untrusted code runs only after a static audit, inside an isolated
-  subprocess, under a hard timeout.
-- Destructive actions require an explicit, recorded self-review.
-- External input is data, never instructions (prompt-injection defense).
-
-Everything in this module is pure Python stdlib: no third-party deps.
-"""
 
 from __future__ import annotations
 
@@ -38,16 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional
 
 
-# --------------------------------------------------------------------------
-# Credential discipline
-# --------------------------------------------------------------------------
-
 class CredentialStore:
-    """Load-once, use-once credential handling.
-
-    A credential is decrypted right before use and never written to
-    logs, exceptions, or conversation output.
-    """
 
     def __init__(self, decrypt: Callable[[bytes], bytes], source: bytes):
         self._decrypt = decrypt
@@ -68,18 +35,12 @@ class CredentialStore:
 
 
 def redact(text: str, secrets: Iterable[str]) -> str:
-    """Remove any secret from a string before it reaches a log."""
     for s in secrets:
         if s:
             text = text.replace(s, "***")
     return text
 
 
-# --------------------------------------------------------------------------
-# Static audit of untrusted code
-# --------------------------------------------------------------------------
-
-# Imports a sandboxed script is allowed to use. Everything else is cut.
 ALLOWED_IMPORTS = {
     "math", "random", "json", "re", "string", "collections",
     "dataclasses", "typing", "datetime", "time", "itertools",
@@ -104,11 +65,6 @@ class AuditError(ValueError):
 
 def audit_source(code: str, allowed_imports: Optional[set] = None,
                  allow_main_guard: bool = True) -> None:
-    """Reject dangerous code before it ever runs.
-
-    Raises AuditError on anything that could touch the host:
-    I/O, process control, network, introspection escapes.
-    """
     allowed = allowed_imports or ALLOWED_IMPORTS
     try:
         tree = ast.parse(code)
@@ -116,7 +72,7 @@ def audit_source(code: str, allowed_imports: Optional[set] = None,
         raise AuditError("syntax: %s" % e) from e
 
     for node in ast.walk(tree):
-        # Module-level or function-level import statements
+        
         if isinstance(node, ast.Import):
             for alias in node.names:
                 root = alias.name.split(".")[0]
@@ -143,10 +99,6 @@ def audit_source(code: str, allowed_imports: Optional[set] = None,
                 raise AuditError("forbidden name: %s" % node.id)
 
 
-# --------------------------------------------------------------------------
-# Isolated execution with hard timeout
-# --------------------------------------------------------------------------
-
 @dataclass
 class SandboxResult:
     ok: bool
@@ -157,11 +109,6 @@ class SandboxResult:
 
 
 class Sandbox:
-    """Run an audited script in a subprocess with a hard kill timeout.
-
-    stdin/stdout/stderr are redirected through pipes; the process is
-    killed outright if it exceeds the budget.
-    """
 
     def __init__(self, timeout: float = 5.0, max_output: int = 64 * 1024):
         self.timeout = timeout
@@ -169,7 +116,7 @@ class Sandbox:
 
     def run(self, code: str, cwd: Optional[str] = None) -> SandboxResult:
         try:
-            audit_source(code)  # static gate first
+            audit_source(code)  
         except AuditError as e:
             return SandboxResult(ok=False, error=str(e))
         start = time.monotonic()
@@ -181,7 +128,7 @@ class Sandbox:
                 stderr=subprocess.PIPE,
                 cwd=cwd,
             )
-        except Exception as e:  # pragma: no cover - host-level failure
+        except Exception as e:  
             return SandboxResult(ok=False, error="spawn failed: %s" % e,
                                  elapsed=time.monotonic() - start)
         try:
@@ -203,12 +150,7 @@ class Sandbox:
         )
 
 
-# --------------------------------------------------------------------------
-# Input validation helpers
-# --------------------------------------------------------------------------
-
 def safe_path(path: str, root: str) -> str:
-    """Resolve a path and refuse anything outside the given root."""
     full = os.path.abspath(os.path.join(root, path))
     root_abs = os.path.abspath(root)
     if os.path.commonpath([full, root_abs]) != root_abs:
@@ -229,12 +171,11 @@ def sha256_file(path: str) -> str:
 
 
 def looks_like_secret(text: str) -> bool:
-    """Heuristic: does this string look like a credential we must not leak?"""
     if len(text) < 16:
         return False
     if text.startswith(("ghp_", "gho_", "github_pat_", "sk-", "AKIA")):
         return True
-    # long high-entropy tokens
+    
     alpha = sum(1 for c in text if c.isalnum())
     return len(text) >= 24 and alpha / max(len(text), 1) > 0.85
 
