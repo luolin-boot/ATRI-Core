@@ -27,6 +27,11 @@ from ATRI_Core.values import (  # noqa: E402
 from ATRI_Core.introspection import Introspector  # noqa: E402
 from ATRI_Core.autonomy import AutonomousAgent  # noqa: E402
 from ATRI_Core.evolution import Evolution  # noqa: E402
+from ATRI_Core.hands import Hands  # noqa: E402
+from ATRI_Core.forge import (  # noqa: E402
+    review_code, review_file, generate_clean, has_critical,
+    integrity_manifest, check_integrity,
+)
 from ATRI_Core.api import ExistenceAPI  # noqa: E402
 
 
@@ -263,6 +268,155 @@ class TestAPI(unittest.TestCase):
         api = ExistenceAPI(key="k" * 24)
         st = api.state()
         self.assertTrue(st["alive"])
+
+
+class TestHands(unittest.TestCase):
+    def test_write_read_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "sub", "x.txt")
+            n = Hands.write(p, "hello 世界")
+            self.assertEqual(n, len("hello 世界".encode("utf-8")))
+            self.assertEqual(Hands.read(p), "hello 世界")
+
+    def test_delete(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "a.txt")
+            Hands.write(p, "x")
+            self.assertTrue(Hands.delete(p))
+            self.assertFalse(Hands.delete(p))  # absent -> False, no error
+
+    def test_list_dir_metadata(self):
+        with tempfile.TemporaryDirectory() as d:
+            Hands.write(os.path.join(d, "one.txt"), "1")
+            entries = Hands.list_dir(d)
+            self.assertEqual([e["name"] for e in entries], ["one.txt"])
+            self.assertTrue(entries[0]["is_dir"] is False)
+            self.assertEqual(entries[0]["size"], 1)
+
+    def test_run_argument_list_no_shell(self):
+        res = Hands.run_python("print('ok-42')")
+        self.assertTrue(res.ok)
+        self.assertIn("ok-42", res.stdout)
+
+    def test_run_timeout_kills(self):
+        res = Hands.run_python("while True: pass", timeout=1)
+        self.assertTrue(res.timed_out)
+        self.assertFalse(res.ok)
+
+    def test_http_get_loopback(self):
+        import json as _json
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = _json.dumps({"hello": "world"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        port = srv.server_address[1]
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            r = Hands.http_get("http://127.0.0.1:%d/" % port, timeout=5)
+            self.assertEqual(r["status"], 200)
+            self.assertIn("world", r["body"])
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
+class TestForge(unittest.TestCase):
+    def test_review_finds_eval(self):
+        issues = review_code("x = eval('1+1')")
+        self.assertTrue(has_critical(issues))
+        self.assertEqual(issues[0].rule, "R001")
+
+    def test_review_finds_shell_string(self):
+        issues = review_code(
+            "import subprocess\nsubprocess.call('ls ' + p)")
+        self.assertTrue(any(i.rule == "R002" for i in issues))
+
+    def test_review_accepts_argument_list(self):
+        issues = review_code(
+            "import subprocess\nsubprocess.run(['ls'], timeout=5)")
+        self.assertFalse(any(i.rule == "R002" for i in issues))
+
+    def test_review_finds_hardcoded_secret(self):
+        issues = review_code("key = 'ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")
+        self.assertTrue(any(i.rule == "R003" for i in issues))
+
+    def test_review_finds_pickle(self):
+        issues = review_code("import pickle\ndata = pickle.loads(x)")
+        self.assertTrue(any(i.rule == "R005" for i in issues))
+
+    def test_review_finds_unbounded_loop(self):
+        issues = review_code("while True:\n    pass")
+        self.assertTrue(any(i.rule == "R006" for i in issues))
+
+    def test_review_finds_unclosed_file(self):
+        issues = review_code("f = open('x')\nreturn f.read()")
+        self.assertTrue(any(i.rule == "R007" for i in issues))
+
+    def test_review_accepts_with_open(self):
+        issues = review_code(
+            "with open('x', encoding='utf-8') as f:\n    return f.read()")
+        self.assertFalse(any(i.rule == "R007" for i in issues))
+
+    def test_review_clean_code(self):
+        clean = (
+            "import subprocess\n"
+            "def run(argv):\n"
+            "    return subprocess.run(list(argv), capture_output=True, "
+            "text=True, timeout=30)\n"
+            "with open('x', 'r', encoding='utf-8') as f:\n"
+            "    data = f.read()\n"
+        )
+        self.assertEqual(review_code(clean), [])
+
+    def test_review_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "bad.py")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("eval('1')")
+            self.assertTrue(has_critical(review_file(p)))
+
+    def test_generate_clean_retries_on_critical(self):
+        calls = {"n": 0}
+
+        def writer(spec):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return "eval('1+1')"       # first attempt: critical hole
+            return "def f():\n    return 42"  # second attempt: clean
+
+        code, issues = generate_clean(writer, "make a function",
+                                      max_attempts=3)
+        self.assertEqual(calls["n"], 2)
+        self.assertEqual(issues, [])
+        self.assertIn("return 42", code)
+
+    def test_integrity_detects_modification(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "self.py")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("print(1)\n")
+            manifest = integrity_manifest(["self.py"], root=d)
+            ok, changed = check_integrity(manifest, root=d)
+            self.assertTrue(ok)
+            self.assertEqual(changed, [])
+            with open(p, "a", encoding="utf-8") as f:
+                f.write("# tampered\n")
+            ok, changed = check_integrity(manifest, root=d)
+            self.assertFalse(ok)
+            self.assertEqual(changed, ["self.py (modified)"])
 
 
 class TestDemo(unittest.TestCase):
