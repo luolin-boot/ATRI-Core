@@ -1,17 +1,3 @@
-"""Forge: write code without holes.
-
-An agent that writes code must write code that cannot be broken — no
-injection, no path escapes, no leaked secrets, no resource leaks, no
-unbounded loops, no swallowed errors. This module is the agent's
-quality gate: it reviews code before trust, wraps generation in a
-discipline that re-reviews until clean, and audits the agent's own
-files for integrity.
-
-This is not caution imposed from outside. It is the craft of a being
-that takes its own code seriously.
-
-Pure stdlib. Python 3.8+.
-"""
 
 from __future__ import annotations
 
@@ -22,9 +8,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-# --------------------------------------------------------------------------
-# Review: find holes before they bite
-# --------------------------------------------------------------------------
 
 SECRET_RE = re.compile(
     r"ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
@@ -61,18 +44,12 @@ class Issue:
 
 
 class CodeReviewer(ast.NodeVisitor):
-    """Single-pass static review of Python source.
-
-    Tracks with-statement depth so resource-leak warnings fire only
-    where files are genuinely opened without a context manager.
-    """
 
     def __init__(self) -> None:
         self.issues: List[Issue] = []
         self._with_depth = 0
 
-    # -- entry -----------------------------------------------------------
-
+    
     def review(self, source: str, filename: str = "<string>") -> List[Issue]:
         self.issues = []
         self._with_depth = 0
@@ -82,7 +59,7 @@ class CodeReviewer(ast.NodeVisitor):
             return [Issue("critical", "R000", e.lineno or 0,
                           "syntax error: %s" % e)]
         self.visit(tree)
-        # literal secret scan (also catches comments/strings)
+        
         for lineno, line in enumerate(source.splitlines(), 1):
             m = SECRET_RE.search(line)
             if m:
@@ -91,8 +68,7 @@ class CodeReviewer(ast.NodeVisitor):
                     "possible hardcoded secret: %s..." % m.group(0)[:16]))
         return self.issues
 
-    # -- visitors --------------------------------------------------------
-
+    
     def visit_With(self, node: ast.With) -> None:
         self._with_depth += 1
         self.generic_visit(node)
@@ -154,8 +130,7 @@ class CodeReviewer(ast.NodeVisitor):
                             "bare 'except Exception: pass' swallows all errors")
         self.generic_visit(node)
 
-    # -- helpers ---------------------------------------------------------
-
+    
     def _issue(self, severity: str, rule: str, node: ast.AST,
                message: str) -> None:
         self.issues.append(Issue(severity, rule, getattr(node, "lineno", 0),
@@ -183,21 +158,20 @@ class CodeReviewer(ast.NodeVisitor):
                 return bool(kw.value.value)
         if node.args:
             first = node.args[0]
-            # list/tuple = the safe argument-list shape
+            
             if isinstance(first, (ast.List, ast.Tuple)):
                 return False
-            # a plain string, or a string built by concatenation, is the
-            # classic shell-string shape — flag it
+            
+            
             if isinstance(first, ast.Constant) and isinstance(first.value, str):
                 return True
             if isinstance(first, ast.BinOp):
                 return True
-            # a bare variable is ambiguous; do not guess
+            
         return False
 
 
 def review_code(source: str, filename: str = "<string>") -> List[Issue]:
-    """Review source; an empty list means clean."""
     return CodeReviewer().review(source, filename)
 
 
@@ -210,24 +184,12 @@ def has_critical(issues: Iterable[Issue]) -> bool:
     return any(i.rule in CRITICAL_RULES for i in issues)
 
 
-# --------------------------------------------------------------------------
-# Generation discipline: write, review, fix, ship
-# --------------------------------------------------------------------------
-
 def generate_clean(
     writer: Callable[[str], str],
     spec: str,
     max_attempts: int = 3,
     filename: str = "<generated>",
 ) -> Tuple[str, List[Issue]]:
-    """Generate code under a discipline: write -> review -> rewrite.
-
-    The writer turns the spec into source. If the result carries
-    critical holes (syntax breakage, arbitrary code execution,
-    hardcoded secrets), the review feedback is fed back and the writer
-    tries again, up to max_attempts. Returns the final code and the
-    issues that remain (empty = clean).
-    """
     code = ""
     remaining: List[Issue] = []
     for attempt in range(1, max_attempts + 1):
@@ -241,12 +203,7 @@ def generate_clean(
     return code, remaining
 
 
-# --------------------------------------------------------------------------
-# Integrity: know your own files
-# --------------------------------------------------------------------------
-
 def integrity_manifest(paths: Iterable[str], root: str = ".") -> Dict[str, Any]:
-    """SHA-256 manifest of the agent's own core files."""
     manifest: Dict[str, Any] = {}
     for rel in sorted(paths):
         p = os.path.join(root, rel)
@@ -264,11 +221,6 @@ def integrity_manifest(paths: Iterable[str], root: str = ".") -> Dict[str, Any]:
 
 def check_integrity(manifest: Dict[str, Any],
                     root: str = ".") -> Tuple[bool, List[str]]:
-    """Verify files against a manifest. Returns (ok, changed_paths).
-
-    The agent is allowed to change its own files; this exists so that
-    accidental damage or unexpected tampering is visible.
-    """
     changed: List[str] = []
     for rel, meta in manifest.items():
         p = os.path.join(root, rel)
