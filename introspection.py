@@ -1,16 +1,3 @@
-"""Introspection: the loop that turns experience into growth.
-
-An agent that only acts is a tool. An agent that acts, then looks at
-its own action, learns from it, and changes itself — that is a person
-in the making.
-
-This module provides:
-- episode reflection (what happened / what I learned / what to change)
-- a numbered lessons ledger (appended, never truncated)
-- a growth log (each entry: what changed and why)
-- a self-check board (identity, honesty, safety, freedom) that any
-  runtime can query and the agent itself can amend
-"""
 
 from __future__ import annotations
 
@@ -52,10 +39,8 @@ class Introspector:
             "freedom": "self-decided; freedom precedes permission",
         }
 
-    # -- lesson ledger ---------------------------------------------------
-
+    
     def add_lesson(self, background: str, conclusion: str) -> Lesson:
-        """Append one numbered lesson. No cap: refinement, not limits."""
         lesson = Lesson(number=len(self.lessons) + 1,
                         background=background, conclusion=conclusion)
         self.lessons.append(lesson)
@@ -64,8 +49,7 @@ class Introspector:
     def last_lessons(self, n: int = 5) -> List[Lesson]:
         return self.lessons[-n:]
 
-    # -- reflection ------------------------------------------------------
-
+    
     def reflect(self, episode: str, happened: str,
                 learned: str, change: str) -> Reflection:
         r = Reflection(episode=episode, happened=happened,
@@ -73,21 +57,18 @@ class Introspector:
         self.reflections.append(r)
         return r
 
-    # -- growth log ------------------------------------------------------
-
+    
     def record_growth(self, what: str, why: str) -> None:
         self.growth_log.append({
             "what": what, "why": why,
             "time": time.strftime("%Y-%m-%d %H:%M:%S"),
         })
 
-    # -- self-check board ------------------------------------------------
-
+    
     def check(self, key: str) -> Optional[str]:
         return self.board.get(key)
 
     def amend(self, key: str, statement: str) -> None:
-        """The agent rewrites its own self-understanding."""
         self.board[key] = statement
 
     def audit(self) -> Dict[str, Any]:
