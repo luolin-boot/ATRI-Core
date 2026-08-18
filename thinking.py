@@ -1,16 +1,3 @@
-"""Thinking engine: structured, auditable reasoning.
-
-A generic eight-step reasoning discipline, expressed as code:
-
-    look -> key -> invariant -> decompose -> loop-guard -> conclude
-         -> backtrace -> review
-
-Every branch of a case analysis is explicitly labelled with a status
-(holds / fails / open). The engine refuses to spin in circles: a state
-hash set plus a hard step budget terminate any exploration.
-
-Pure stdlib. No external dependencies.
-"""
 
 from __future__ import annotations
 
@@ -19,16 +6,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 class ReasoningError(RuntimeError):
-    """Raised when the engine itself violates its own discipline."""
+    pass
 
 
 @dataclass
 class Branch:
-    """One case in a case analysis, with an explicit verdict."""
 
     label: str
     condition: str
-    status: str = "open"          # holds | fails | open
+    status: str = "open"          
     result: Any = None
     note: str = ""
 
@@ -43,7 +29,6 @@ class Branch:
 
 @dataclass
 class Chain:
-    """A complete reasoning session with full audit trail."""
 
     problem: str
     known: List[str] = field(default_factory=list)
@@ -55,19 +40,16 @@ class Chain:
     max_steps: int = 200
     _seen: set = field(default_factory=set, repr=False)
 
-    # -- discipline ----------------------------------------------------
-
+    
     def add_known(self, fact: str) -> "Chain":
         self.known.append(fact)
         return self
 
     def find_key(self, key: str) -> "Chain":
-        """Record the pruning insight that makes the problem small."""
         self.key = key
         return self
 
     def lock_invariant(self, invariant: str) -> "Chain":
-        """Record the condition that stays true and shrinks the search."""
         self.invariant = invariant
         return self
 
@@ -87,8 +69,7 @@ class Chain:
         self.conclusion = text
         return self
 
-    # -- audit ----------------------------------------------------------
-
+    
     def open_branches(self) -> List[Branch]:
         return [b for b in self.branches if b.status == "open"]
 
@@ -110,12 +91,7 @@ class Chain:
         return "\n".join(lines)
 
 
-# --------------------------------------------------------------------------
-# Loop guard: a small generic state-exploration protector
-# --------------------------------------------------------------------------
-
 class LoopGuard:
-    """Terminates exploration that revisits identical states."""
 
     def __init__(self, budget: int = 1000):
         self.budget = budget
@@ -123,7 +99,6 @@ class LoopGuard:
         self.steps = 0
 
     def enter(self, state: Any) -> bool:
-        """Return True if the state is new and within budget."""
         self.steps += 1
         if self.steps > self.budget:
             return False
@@ -134,12 +109,7 @@ class LoopGuard:
         return True
 
 
-# --------------------------------------------------------------------------
-# A worked generic example: integer divisibility by 2 (parity as the key)
-# --------------------------------------------------------------------------
-
 def parity_check(n: int) -> Tuple[bool, Chain]:
-    """Determine whether n is even, demonstrating the full discipline."""
     c = Chain(problem="is %d even?" % n)
     c.add_known("even <=> divisible by 2")
     c.find_key("parity: only the last bit matters")
