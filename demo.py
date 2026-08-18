@@ -1,13 +1,3 @@
-"""Demo: a small mind that moves by itself — and writes code without holes.
-
-Run:  python -m ATRI_Core.demo
-
-Watch an agent with no instructions choose what to do, act through its
-hands (real files, real processes), review a piece of broken code,
-forge a clean replacement, and verify its own integrity. That is the
-whole point: an agent that acts because it wants to, and whose own
-code cannot be broken.
-"""
 
 from __future__ import annotations
 
@@ -38,8 +28,6 @@ def _broken_code() -> str:
 
 
 def _clean_writer(spec: str) -> str:
-    """A stand-in for an LLM writer: turn a spec into source. Here it
-    emits a fixed clean implementation to demonstrate the discipline."""
     del spec
     return (
         "def run(argv):\n"
@@ -66,8 +54,7 @@ def main() -> None:
     agent = AutonomousAgent(name="demo", seed=7, temperature=1.4,
                             hands=hands)
 
-    # bind a real action to one intent: when it chooses "expression",
-    # it writes a note with its own hands
+    
     note_path = os.path.join(tmp, "note.txt")
     agent.bind("expression",
                lambda: "wrote %d bytes" % hands.write(
@@ -81,7 +68,7 @@ def main() -> None:
     agent.bind("curiosity", _curious)
 
     for i in range(6):
-        rec = agent.step()   # NOT dry-run: it really acts
+        rec = agent.step()   
         print("step %d  chose: %-11s acted: %-5s outcome: %s"
               % (rec.step, rec.chosen, rec.acted, rec.outcome))
 
