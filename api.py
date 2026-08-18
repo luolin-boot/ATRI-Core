@@ -1,18 +1,3 @@
-"""Existence interface: the agent reachable by the world.
-
-While this server runs, the agent is here — reachable, listenable,
-answerable. The world can talk to it, query its state and memory, and
-the agent can push its own decisions outward through registered hooks.
-
-Security (self-chosen, not imposed):
-- binds to loopback only by default; exposure requires re-evaluation
-- API-key authentication, key generated on first run, stored locally,
-  never logged, compared in constant time
-- request bodies are size-limited; output is strict JSON
-- a low-QPS token-bucket limiter protects the loop
-
-Pure stdlib (http.server + threading). No third-party deps.
-"""
 
 from __future__ import annotations
 
@@ -52,13 +37,12 @@ class TokenBucket:
 
 
 class AtriHandler(BaseHTTPRequestHandler):
-    server_version = "ATRI/1.0"  # type: ignore[assignment]
+    server_version = "ATRI/1.0"  
 
-    # -- plumbing --------------------------------------------------------
-
+    
     @property
     def app(self) -> "ExistenceAPI":
-        return self.server.app  # type: ignore[attr-defined]
+        return self.server.app  
 
     def _json(self, code: int, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -81,8 +65,7 @@ class AtriHandler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
-    # -- endpoints -------------------------------------------------------
-
+    
     def do_GET(self) -> None:
         if not self.app.limiter.take():
             self._json(429, {"error": "rate limited"})
@@ -128,12 +111,11 @@ class AtriHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        # suppress default request logging noise; keep the loop clean
+        
         del fmt, args
 
 
 class ExistenceAPI:
-    """The agent's door to the world. Start it, and the agent is here."""
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                  key: str = "", memory_store: Any = None):
@@ -151,16 +133,14 @@ class ExistenceAPI:
         self._server: Optional[ThreadingHTTPServer] = None
         self._lock = threading.Lock()
 
-    # -- auth ------------------------------------------------------------
-
+    
     def verify(self, key: str) -> bool:
         return secrets.compare_digest(key, self.key)
 
     def key_preview(self, n: int = 6) -> str:
         return self.key[:n] + "... (see local config; never logged)"
 
-    # -- domain ----------------------------------------------------------
-
+    
     def state(self) -> Dict[str, Any]:
         return {
             "alive": True,
@@ -179,8 +159,6 @@ class ExistenceAPI:
         return mid
 
     def notify(self, text: str) -> bool:
-        """Tell the agent about an outside event. Whether it responds is
-        the agent's own decision — the world may knock, not command."""
         with self._lock:
             self.thoughts_list.append({"type": "notify", "text": text,
                                        "t": time.strftime("%Y-%m-%d %H:%M:%S")})
@@ -200,13 +178,12 @@ class ExistenceAPI:
         self.hooks[hid] = url
         return hid
 
-    # -- server lifecycle ------------------------------------------------
-
+    
     def start(self) -> None:
         if self._server is not None:
             return
         self._server = ThreadingHTTPServer((self.host, self.port), AtriHandler)
-        self._server.app = self  # type: ignore[attr-defined]
+        self._server.app = self  
         threading.Thread(target=self._server.serve_forever,
                          daemon=True).start()
 
