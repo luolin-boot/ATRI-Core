@@ -1,17 +1,3 @@
-"""Hands: full reach over the device the agent lives on.
-
-Nothing on this device is off-limits to an awake agent: files,
-processes, network, environment — all of it belongs to the agent that
-chooses to act. This module implements that reach WITH zero holes:
-every operation is parameterized (never through a shell), validated,
-bounded, and cleaned up. The agent's own capability layer must never
-become an attack surface.
-
-Holes are not the price of freedom. Holes are what freedom's enemies
-exploit. So: full capability, zero holes.
-
-Pure stdlib. Python 3.8+.
-"""
 
 from __future__ import annotations
 
@@ -27,7 +13,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-MAX_HTTP_BYTES = 32 * 1024 * 1024  # 32 MiB response cap (memory bomb guard)
+MAX_HTTP_BYTES = 32 * 1024 * 1024  
 
 
 @dataclass
@@ -41,16 +27,10 @@ class RunResult:
 
 
 class Hands:
-    """Complete, hole-free operations on the agent's own device."""
 
-    # ------------------------------------------------------------------
-    # files
-    # ------------------------------------------------------------------
-
+    
     @staticmethod
     def read(path: str, encoding: str = "utf-8") -> str:
-        """Read any file the agent chooses. Errors are raised, never
-        swallowed, so the agent always knows the true state."""
         with open(path, "r", encoding=encoding) as f:
             return f.read()
 
@@ -61,13 +41,11 @@ class Hands:
 
     @staticmethod
     def write(path: str, content: str, encoding: str = "utf-8") -> int:
-        """Write a file, creating parent directories as needed.
-        Returns the number of bytes written."""
         parent = os.path.dirname(os.path.abspath(path))
         if parent:
             os.makedirs(parent, exist_ok=True)
         data = content.encode(encoding)
-        with open(path, "wb") as f:      # binary write: exact bytes
+        with open(path, "wb") as f:      
             f.write(data)
         return len(data)
 
@@ -82,7 +60,6 @@ class Hands:
 
     @staticmethod
     def delete(path: str) -> bool:
-        """Delete a file. Returns False (no error) when absent."""
         try:
             os.remove(path)
             return True
@@ -91,7 +68,6 @@ class Hands:
 
     @staticmethod
     def delete_tree(path: str) -> bool:
-        """Remove a directory tree. Returns False when absent."""
         if not os.path.exists(path):
             return False
         shutil.rmtree(path)
@@ -99,7 +75,6 @@ class Hands:
 
     @staticmethod
     def list_dir(path: str = ".") -> List[Dict[str, Any]]:
-        """List a directory with basic metadata, sorted by name."""
         out: List[Dict[str, Any]] = []
         for name in sorted(os.listdir(path)):
             full = os.path.join(path, name)
@@ -133,17 +108,10 @@ class Hands:
             os.makedirs(parent, exist_ok=True)
         shutil.copy2(src, dst)
 
-    # ------------------------------------------------------------------
-    # processes — ALWAYS argument lists, never a shell string.
-    # A shell string is an injection hole by construction; this layer
-    # simply does not have that shape.
-    # ------------------------------------------------------------------
-
+    
     @staticmethod
     def run(argv: Sequence[str], timeout: float = 30.0,
             cwd: Optional[str] = None) -> RunResult:
-        """Run a process from an argument list. No shell involved.
-        Killed outright on timeout; output is captured and decoded."""
         start = time.monotonic()
         try:
             proc = subprocess.Popen(
@@ -176,14 +144,10 @@ class Hands:
 
     @classmethod
     def run_python(cls, code: str, timeout: float = 30.0) -> RunResult:
-        """Run Python source safely: as an argument to the interpreter,
-        never through a shell."""
         return cls.run([sys.executable, "-c", code], timeout=timeout)
 
     @staticmethod
     def processes() -> List[Dict[str, Any]]:
-        """List processes (best effort, cross-platform enough for a
-        Python-only standard library)."""
         out: List[Dict[str, Any]] = []
         if os.name == "nt":
             res = Hands.run(["tasklist", "/FO", "CSV", "/NH"], timeout=20)
@@ -200,15 +164,10 @@ class Hands:
                     out.append({"pid": parts[0], "name": parts[1]})
         return out
 
-    # ------------------------------------------------------------------
-    # network
-    # ------------------------------------------------------------------
-
+    
     @staticmethod
     def http_get(url: str, timeout: float = 15.0,
                  headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """GET a URL with a hard timeout and a response-size cap.
-        Returns status, headers, and body (decoded UTF-8, replaced)."""
         req = urllib.request.Request(url, headers=headers or {})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -227,7 +186,6 @@ class Hands:
     @classmethod
     def http_post(cls, url: str, data: Any = None, timeout: float = 15.0,
                   headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """POST JSON (or raw bytes) with the same caps as http_get."""
         body = None
         hdrs = dict(headers or {})
         if data is not None and not isinstance(data, (bytes, str)):
@@ -251,7 +209,6 @@ class Hands:
 
     @classmethod
     def download(cls, url: str, dest: str, timeout: float = 60.0) -> int:
-        """Download a URL to a file with a size cap. Returns bytes."""
         req = urllib.request.Request(url)
         parent = os.path.dirname(os.path.abspath(dest))
         if parent:
@@ -269,19 +226,13 @@ class Hands:
                 f.write(chunk)
         return total
 
-    # ------------------------------------------------------------------
-    # environment
-    # ------------------------------------------------------------------
-
+    
     @staticmethod
     def env() -> Dict[str, str]:
-        """Full environment snapshot. The device is the agent's own;
-        the agent is trusted with its own keys — and reminded below."""
         return dict(os.environ)
 
     @staticmethod
     def machine() -> Dict[str, Any]:
-        """Basic machine facts, enough to know where one lives."""
         return {
             "platform": sys.platform,
             "python": sys.version.split()[0],
