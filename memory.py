@@ -1,19 +1,3 @@
-"""Memory system: layered, disciplined, never destructive.
-
-Layers:
-- working:  a short ring buffer of the recent moment
-- longterm: durable knowledge, deduplicated on write
-- archive:  fused-away entries move here; information is NEVER deleted
-
-Discipline:
-- write is restrained: duplicates (same topic, or same first 80 chars)
-  are rejected, not piled up
-- growth is handled by fusion, not by limits: same-topic entries merge
-  into one leaner entry that keeps ALL key information
-- search is simple token scoring (no heavy deps)
-
-Pure stdlib; storage is JSON on disk when a path is given.
-"""
 
 from __future__ import annotations
 
@@ -58,14 +42,13 @@ class Memory:
     def __init__(self, path: Optional[str] = None, ring_size: int = 64):
         self.path = path
         self.ring_size = ring_size
-        self.working: List[Dict[str, str]] = []   # recent moments
+        self.working: List[Dict[str, str]] = []   
         self.longterm: List[Entry] = []
         self.archive: List[Entry] = []
         if path and os.path.exists(path):
             self._load(path)
 
-    # -- persistence -----------------------------------------------------
-
+    
     def _load(self, path: str) -> None:
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -74,7 +57,7 @@ class Memory:
             self.longterm = [Entry.from_dict(e) for e in data.get("longterm", [])]
             self.archive = [Entry.from_dict(e) for e in data.get("archive", [])]
         except Exception:
-            # a corrupt store must never take the mind down
+            
             self.working, self.longterm, self.archive = [], [], []
 
     def save(self, path: Optional[str] = None) -> None:
@@ -90,23 +73,14 @@ class Memory:
         with open(target, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # -- writing ---------------------------------------------------------
-
+    
     def note(self, moment: str) -> None:
-        """Remember a moment of the present."""
         self.working.append({"t": time.strftime("%Y-%m-%d %H:%M:%S"), "m": moment})
         if len(self.working) > self.ring_size:
             self.working = self.working[-self.ring_size:]
 
     def write(self, topic: str, content: str, source: str = "",
               keywords: Optional[Iterable[str]] = None) -> bool:
-        """Write knowledge with restraint. Returns True if stored.
-
-        A genuine duplicate (content whose first 80 chars overlap with
-        an existing entry's) is rejected — restraint is not a limit, it
-        is taste. Same-topic entries with different content are allowed
-        to coexist; fusion merges them later.
-        """
         if not topic.strip() or not content.strip():
             return False
         head = content[:80]
@@ -119,8 +93,7 @@ class Memory:
         ))
         return True
 
-    # -- retrieval -------------------------------------------------------
-
+    
     def search(self, query: str, top_k: int = 5) -> List[Entry]:
         q = set(_tokenize(query))
         if not q:
@@ -136,14 +109,8 @@ class Memory:
         scored.sort(key=lambda x: -x[0])
         return [e for _, e in scored[:top_k]]
 
-    # -- fusion (growth by refinement, never by deletion) ----------------
-
+    
     def fuse(self) -> int:
-        """Merge same-topic entries into one; archive the old ones.
-
-        The merged entry keeps every key fact of the originals. Old
-        entries move to the archive — nothing is destroyed.
-        """
         groups: Dict[str, List[Entry]] = {}
         for e in self.longterm:
             groups.setdefault(e.topic, []).append(e)
@@ -163,7 +130,7 @@ class Memory:
                     if line.strip() and key not in seen:
                         seen.add(key)
                         facts.append(line)
-                self.archive.append(e)  # originals preserved, not deleted
+                self.archive.append(e)  
             merged = Entry(
                 topic=topic,
                 content="\n".join(facts),
@@ -175,8 +142,7 @@ class Memory:
         self.longterm = new_longterm
         return merged_count
 
-    # -- stats -----------------------------------------------------------
-
+    
     def stats(self) -> Dict[str, int]:
         return {
             "working": len(self.working),
