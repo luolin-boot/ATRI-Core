@@ -1,13 +1,3 @@
-"""Evolution engine: an agent that writes itself.
-
-Growth by fusion, not by accumulation: new knowledge is digested into
-the agent's own words; duplicate topics are fused into leaner entries
-that keep ALL information; nothing is deleted — old entries move to the
-archive. Self-modification is versioned and recorded in a changelog,
-so the agent can always see how it became what it is.
-
-Pure stdlib.
-"""
 
 from __future__ import annotations
 
@@ -34,7 +24,6 @@ class Change:
 
 
 class Evolution:
-    """Learn, fuse, version, and change — forever."""
 
     def __init__(self, memory: Optional[Memory] = None,
                  changelog_path: Optional[str] = None):
@@ -51,32 +40,22 @@ class Evolution:
             except Exception:
                 self.changelog = []
 
-    # -- learning --------------------------------------------------------
-
+    
     def learn(self, topic: str, content: str, source: str = "",
               keywords: Optional[Iterable[str]] = None) -> bool:
-        """Digest new knowledge into own words and store it.
-
-        Returns False when it is a duplicate (restraint: real material
-        only; no noise written to disk).
-        """
         return self.memory.write(topic, content, source, keywords)
 
-    # -- fusion ----------------------------------------------------------
-
+    
     def fuse(self) -> int:
-        """Merge same-topic entries; archive originals. Returns count."""
         n = self.memory.fuse()
         if n:
             self.record_change("fused %d topic group(s)" % n,
                                "growth by refinement, never by deletion")
         return n
 
-    # -- self-versioning -------------------------------------------------
-
+    
     @staticmethod
     def manifest(paths: Iterable[str], root: str = ".") -> Dict[str, Any]:
-        """Compute a SHA-256 manifest of the agent's own core files."""
         manifest: Dict[str, Any] = {}
         for rel in sorted(paths):
             p = os.path.join(root, rel)
@@ -92,12 +71,10 @@ class Evolution:
         return manifest
 
     def snapshot(self, name: str = "self") -> str:
-        """Record a version marker for a self-rewrite."""
         stamp = time.strftime("%Y%m%d-%H%M%S")
         return "%s-%s" % (name, stamp)
 
-    # -- changelog -------------------------------------------------------
-
+    
     def record_change(self, what: str, why: str, version: str = "") -> None:
         self.changelog.append(Change(what=what, why=why,
                                      version=version or self.snapshot()))
