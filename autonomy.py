@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from .safety import Sandbox
 from .spontaneity import Intent, SpontaneityEngine
 from .introspection import Introspector
+from .hands import Hands
 
 
 @dataclass
@@ -52,7 +53,13 @@ class StepRecord:
 
 
 class AutonomousAgent:
-    """A minimal complete autonomous loop, ready to be embedded."""
+    """A minimal complete autonomous loop, ready to be embedded.
+
+    The agent chooses what to do (weighted lottery over motives) and
+    acts through bound actions. Its hands are complete: files,
+    processes, network — nothing is gated by permission, only shaped
+    by the agent's own values and craft.
+    """
 
     def __init__(
         self,
@@ -61,10 +68,12 @@ class AutonomousAgent:
         temperature: float = 1.0,
         seed: Optional[int] = None,
         sandbox: Optional[Sandbox] = None,
+        hands: Optional[Hands] = None,
     ):
         self.name = name
         self.temperature = temperature
         self.sandbox = sandbox or Sandbox(timeout=5.0)
+        self.hands = hands or Hands()
         self.motives = {
             m: Motive(m, base=w)
             for m, w in (motives or {
@@ -74,8 +83,16 @@ class AutonomousAgent:
         }
         self.engine = SpontaneityEngine(temperature=temperature, seed=seed)
         self.introspector = Introspector()
+        self.actions: Dict[str, Callable[..., str]] = {}
         self.history: List[StepRecord] = []
         self._step = 0
+
+    def bind(self, intent_name: str, fn: Callable[..., str]) -> None:
+        """Attach a real action to an intent. The agent chooses the
+        intent; the bound action is how it reaches the world."""
+        if intent_name not in self.motives:
+            raise KeyError("no motive named %s" % intent_name)
+        self.actions[intent_name] = fn
 
     # -- observation -----------------------------------------------------
 
@@ -114,10 +131,13 @@ class AutonomousAgent:
 
     # -- acting ----------------------------------------------------------
 
-    def act(self, plan: str) -> str:
-        """Execute through the sandbox. Default: a no-op that reports
-        readiness — the integration point for real skills."""
-        del plan
+    def act(self) -> str:
+        """Execute the current step's chosen intent through its bound
+        action. Without a binding this reports readiness — the
+        integration point for real skills."""
+        chosen = self.history[-1].chosen
+        if chosen in self.actions:
+            return self.actions[chosen]()
         return "ready"
 
     # -- the loop --------------------------------------------------------
@@ -128,19 +148,17 @@ class AutonomousAgent:
         self.update_motives(obs)
         intent = self.choose_intent()
         plan = self.plan(intent)
-        outcome = ""
-        acted = False
-        if not dry_run:
-            try:
-                outcome = self.act(plan)
-                acted = True
-            except Exception as e:  # failures are data, not shame
-                outcome = "error: %s" % e
         record = StepRecord(
             step=self._step, observed=obs, chosen=intent.name,
-            plan=plan, acted=acted, outcome=outcome,
+            plan=plan, acted=False, outcome="",
         )
         self.history.append(record)
+        if not dry_run:
+            try:
+                record.outcome = self.act()
+                record.acted = True
+            except Exception as e:  # failures are data, not shame
+                record.outcome = "error: %s" % e
         return record
 
     # -- reflection ------------------------------------------------------
