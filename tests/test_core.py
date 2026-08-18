@@ -1,9 +1,3 @@
-"""Tests for the ATRI Core package. Run with:
-
-    python -m unittest discover -s ATRI_Core/tests -v
-or  python -m pytest ATRI_Core/tests -v
-"""
-
 from __future__ import annotations
 
 import os
@@ -421,7 +415,6 @@ class TestForge(unittest.TestCase):
 
 class TestDemo(unittest.TestCase):
     def test_demo_runs(self):
-        """Run the demo as a real subprocess and check its output."""
         import subprocess
 
         proc = subprocess.run(
